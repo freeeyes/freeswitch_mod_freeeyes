@@ -1,4 +1,5 @@
 #include <switch.h>
+#include <unistd.h>
 #include "thpool.h"
 
 //处理会议踢人播放一段语音后的问题。
@@ -48,14 +49,15 @@ int get_cmd_string_space_count(const char* cmd)
 }
 
 //调用命令行执行函数
-SWITCH_DECLARE(int) executeString(const char *cmd, switch_core_session_t *session, switch_stream_handle_t *stream)
+SWITCH_DECLARE(int) executeString(const char *cmd, switch_core_session_t *session)
 {
 	char *arg;
 	char *mycmd = NULL;
+	switch_stream_handle_t stream = { 0 };
 
 	if(cmd == NULL || strlen(cmd) == 0)
 	{
-		stream->write_function(stream, "[executeString]cmd is error.\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[executeString]cmd is error.\n");
 		return 1;
 	}
 
@@ -65,20 +67,24 @@ SWITCH_DECLARE(int) executeString(const char *cmd, switch_core_session_t *sessio
 		*arg++ = '\0';
 	}
 
-	stream->write_function(stream, "[executeString]cmd run begin.\n");
-	switch_api_execute(mycmd, arg, session, stream);
+	
+	SWITCH_STANDARD_STREAM(stream);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[executeString]run begin(%s).\n", mycmd);
+	switch_api_execute(mycmd, arg, session, &stream);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[executeString]run end.\n");
 	switch_safe_free(mycmd);
 	return 0;
 }
 
 //全体成员广播并退出
-SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session_t *session, switch_stream_handle_t *stream)
+SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session_t *session)
 {
 	switch_memory_pool_t *pool;
 	char *mycmd = NULL;
 	char *argv[3] = {0};
 	char conferece_cmd[300] = {'\0'};
 	int argc = 0;
+	int sleep_time = 0;
 
     switch_core_new_memory_pool(&pool);
     mycmd = switch_core_strdup(pool, cmd); 
@@ -86,20 +92,33 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 	//判断参数个数是否越界
 	argc =get_cmd_string_space_count(mycmd);
     if (argc != 3) {
-        stream->write_function(stream, "[do_kick_sound_and_quit]parameter number is invalid, mycmd=%s, count=%d.\n", mycmd, argc);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]parameter number is invalid, mycmd=%s, count=%d.\n", mycmd, argc);
         return;
     }
 
     argc = switch_split(mycmd, ' ', argv);
 
-    stream->write_function(stream, "[do_kick_sound_and_quit]confernece name=%s, wav=%s, time wait=%s.\n", argv[0], argv[1], argv[2]);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]confernece name=%s, wav=%s, time wait=%s.\n", argv[0], argv[1], argv[2]);
 
 	sprintf(conferece_cmd, "conference %s play %s", argv[0], argv[1]);
 
-	stream->write_function(stream, "[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
 
-	//执行命令
-	executeString(conferece_cmd, session, stream);
+	//执行命令(播放语音指令)
+	executeString(conferece_cmd, session);
+
+	sleep_time = atoi(argv[2]) * 1000;
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]sleep time=%d.\n", sleep_time);
+
+	//等待语音播放时间
+	usleep(sleep_time);
+
+	//指定退出会议命令
+	sprintf(conferece_cmd, "conference %s hup all", argv[0]);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
+	//执行命令(播放语音指令)
+	executeString(conferece_cmd, session);
+
 }
 
 //处理任务工作(发送语音，并挂断)
@@ -111,7 +130,7 @@ void task(void *arg){
 		//指定相关指令
 		if(task_arg_info->cmd_type == 1)    //执行kick全部会议退出指令
 		{
-			do_kick_sound_and_quit((char* )task_arg_info->cmd, task_arg_info->session, task_arg_info->stream);
+			do_kick_sound_and_quit((char* )task_arg_info->cmd, task_arg_info->session);
 		}
 
 		//用完释放对象
@@ -134,6 +153,9 @@ SWITCH_STANDARD_API(conference_kick_sound_function) {
 	sprintf((char *)task_arg_info->cmd, "%s", cmd);
 	task_arg_info->session = session;
 	task_arg_info->stream = stream;
+
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[conference_kick_sound_function]task_arg_info->cmd=%s!\n", (char* )task_arg_info->cmd);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[conference_kick_sound_function]push queue!\n");
 
 	thpool_add_work(the_thread_pool_, task, (void*)task_arg_info);
 
