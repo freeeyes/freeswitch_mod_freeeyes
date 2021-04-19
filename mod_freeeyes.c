@@ -81,7 +81,7 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 {
 	switch_memory_pool_t *pool;
 	char *mycmd = NULL;
-	char *argv[3] = {0};
+	char *argv[4] = {0};
 	char conferece_cmd[300] = {'\0'};
 	int argc = 0;
 	int sleep_time = 0;
@@ -91,16 +91,23 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 
 	//判断参数个数是否越界
 	argc =get_cmd_string_space_count(mycmd);
-    if (argc != 3) {
+    if (argc != 4) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]parameter number is invalid, mycmd=%s, count=%d.\n", mycmd, argc);
         return;
     }
 
     argc = switch_split(mycmd, ' ', argv);
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]confernece name=%s, wav=%s, time wait=%s.\n", argv[0], argv[1], argv[2]);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]confernece name=%s, wav=%s, time wait=%s, memverid=%s.\n", argv[0], argv[1], argv[2], argv[3]);
 
-	sprintf(conferece_cmd, "conference %s play %s", argv[0], argv[1]);
+	if(strcmp(argv[3], "all") == 0)
+	{
+		sprintf(conferece_cmd, "conference %s play %s", argv[0], argv[1]);
+	}
+	else
+	{
+		sprintf(conferece_cmd, "conference %s play %s %s", argv[0], argv[1], argv[3]);
+	}
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
 
@@ -169,7 +176,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_freeeyes_load)
 	/* connect my internal structure to the blank pointer passed to me */
 	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
 
-	SWITCH_ADD_API(commands_api_interface, "conference_sound_kick", "play sound and kick user", conference_kick_sound_function, "<wav file name> <time wait>");
+	SWITCH_ADD_API(commands_api_interface, "conference_sound_kick", "play sound and kick user", conference_kick_sound_function, "<conference name> <wav file name> <time wait> <member id>");
 
 	//启动工作线程
 	the_thread_pool_ = thpool_init(1);
