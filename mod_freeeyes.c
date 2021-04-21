@@ -121,7 +121,14 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 	usleep(sleep_time);
 
 	//指定退出会议命令
-	sprintf(conferece_cmd, "conference %s hup all", argv[0]);
+	if(strcmp(argv[3], "all") == 0)
+	{
+		sprintf(conferece_cmd, "conference %s hup all", argv[0]);
+	}
+	else
+	{
+		sprintf(conferece_cmd, "conference %s kick %s", argv[0], argv[3]);
+	}
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
 	//执行命令(播放语音指令)
 	executeString(conferece_cmd, session);
