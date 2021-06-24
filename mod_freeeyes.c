@@ -81,17 +81,26 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 {
 	switch_memory_pool_t *pool;
 	char *mycmd = NULL;
-	char *argv[4] = {0};
-	char conferece_cmd[300] = {'\0'};
+	char *argv[5] = {0};
+	char conferece_cmd[1024] = {'\0'};
 	int argc = 0;
 	int sleep_time = 0;
+	int i = 0;
+
+	int member_id_list_count = 0;
+	char member_id_list[100][50];
+	char* member_id_user = NULL;
+	char* member_id_buffer = NULL;
+
+
+	memset(member_id_list, 0, 5000);
 
     switch_core_new_memory_pool(&pool);
     mycmd = switch_core_strdup(pool, cmd); 
 
 	//判断参数个数是否越界
 	argc =get_cmd_string_space_count(mycmd);
-    if (argc != 4) {
+    if (argc != 5) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]parameter number is invalid, mycmd=%s, count=%d.\n", mycmd, argc);
         return;
     }
@@ -100,38 +109,106 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]confernece name=%s, wav=%s, time wait=%s, memverid=%s.\n", argv[0], argv[1], argv[2], argv[3]);
 
+	//判断memberid字符串是否为空
+	if(strlen(argv[3]) == 0)
+	{
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]confernece name=%s, memberid is null.\n", argv[0]);
+		return;
+	}
+
 	if(strcmp(argv[3], "all") == 0)
 	{
 		sprintf(conferece_cmd, "conference %s play %s", argv[0], argv[1]);
+
+		//如果是全员通知
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
+
+		//执行命令(播放语音指令)
+		executeString(conferece_cmd, session);		
 	}
 	else
 	{
-		sprintf(conferece_cmd, "conference %s play %s %s", argv[0], argv[1], argv[3]);
+		//拆分字符串
+		member_id_buffer = (char* )argv[3];
+		member_id_user = strsep(&member_id_buffer, ",");
+		while(member_id_user!=NULL)
+		{
+			if(member_id_list_count >= 100)
+			{
+				//最多100个
+				break;
+			}
+
+			//判断字符串长度超长
+			if(strlen(member_id_user) >= 50)
+			{
+				break;
+			}
+
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]member_id_user=%s.\n", member_id_user);
+			if(strcmp(member_id_user, "NULL") == 0)
+			{
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]member_id_user is NULL.\n");
+				break;
+			}
+			
+			sprintf(member_id_list[member_id_list_count], "%s", member_id_user);
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]member_id_list(%d)=%s.\n", member_id_list_count, member_id_list[member_id_list_count]);
+			member_id_list_count++;
+
+			sprintf(conferece_cmd, "conference %s play %s %s", argv[0], argv[1], member_id_user);
+
+			//一个个发语音通知
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);	
+
+			//执行命令(播放语音指令)
+			executeString(conferece_cmd, session);						
+
+			member_id_user = strsep(&member_id_buffer, ",");
+		}		
 	}
-
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
-
-	//执行命令(播放语音指令)
-	executeString(conferece_cmd, session);
 
 	sleep_time = atoi(argv[2]) * 1000;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]sleep time=%d.\n", sleep_time);
 
-	//等待语音播放时间
-	usleep(sleep_time);
+	if(member_id_list_count > 0)
+	{
+		//等待语音播放时间
+		usleep(sleep_time);
+	}
 
 	//指定退出会议命令
 	if(strcmp(argv[3], "all") == 0)
 	{
 		sprintf(conferece_cmd, "conference %s hup all", argv[0]);
+
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
+		//执行命令(播放语音指令)
+		executeString(conferece_cmd, session);		
 	}
 	else
 	{
-		sprintf(conferece_cmd, "conference %s kick %s", argv[0], argv[3]);
+		//一个个的踢出
+		for(i = 0; i < member_id_list_count; i++)
+		{
+			sprintf(conferece_cmd, "conference %s kick %s", argv[0], member_id_list[i]);
+
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
+			//执行命令(踢人指令)
+			executeString(conferece_cmd, session);			
+		}
+
+		//查看是否要结束会议
+		if(strcmp(argv[4], "over") == 0)
+		{
+			sprintf(conferece_cmd, "conference %s hup all", argv[0]);
+
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
+			//执行命令(结束会议)
+			executeString(conferece_cmd, session);				
+		}
 	}
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
-	//执行命令(播放语音指令)
-	executeString(conferece_cmd, session);
+
 
 }
 
