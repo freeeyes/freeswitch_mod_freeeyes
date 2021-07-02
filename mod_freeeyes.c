@@ -79,7 +79,6 @@ SWITCH_DECLARE(int) executeString(const char *cmd, switch_core_session_t *sessio
 //全体成员广播并退出
 SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session_t *session)
 {
-	switch_memory_pool_t *pool;
 	char *mycmd = NULL;
 	char *argv[5] = {0};
 	char conferece_cmd[1024] = {'\0'};
@@ -95,13 +94,13 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 
 	memset(member_id_list, 0, 5000);
 
-    switch_core_new_memory_pool(&pool);
-    mycmd = switch_core_strdup(pool, cmd); 
+    mycmd = strdup(cmd); 
 
 	//判断参数个数是否越界
 	argc =get_cmd_string_space_count(mycmd);
     if (argc != 5) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]parameter number is invalid, mycmd=%s, count=%d.\n", mycmd, argc);
+		switch_safe_free(mycmd);
         return;
     }
 
@@ -113,6 +112,7 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 	if(strlen(argv[3]) == 0)
 	{
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "[do_kick_sound_and_quit]confernece name=%s, memberid is null.\n", argv[0]);
+		switch_safe_free(mycmd);
 		return;
 	}
 
@@ -124,7 +124,7 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"[do_kick_sound_and_quit]conferece_cmd=%s.\n", conferece_cmd);
 
 		//执行命令(播放语音指令)
-		executeString(conferece_cmd, session);		
+		//executeString(conferece_cmd, session);		
 	}
 	else
 	{
@@ -209,7 +209,7 @@ SWITCH_DECLARE(void) do_kick_sound_and_quit(const char *cmd, switch_core_session
 		}
 	}
 
-
+	switch_safe_free(mycmd);
 }
 
 //处理任务工作(发送语音，并挂断)
